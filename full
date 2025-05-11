@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Music App</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #121212;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    input, button {
+      padding: 8px;
+      margin: 5px 0;
+    }
+    #player {
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+      background: #1e1e1e;
+      padding: 10px;
+    }
+    .song {
+      margin: 10px 0;
+      padding: 10px;
+      border: 1px solid #333;
+      cursor: pointer;
+    }
+    .like {
+      float: right;
+      color: red;
+      cursor: pointer;
+    }
+    #ytPlayer {
+      position: fixed;
+      bottom: 100px;
+      right: 10px;
+      width: 200px;
+      height: 113px;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="auth">
+    <h2>Login or Signup</h2>
+    <input type="text" id="email" placeholder="Email"><br>
+    <input type="password" id="password" placeholder="Password"><br>
+    <button onclick="signup()">Signup</button>
+    <button onclick="login()">Login</button>
+    <p id="authMessage"></p>
+  </div>
+
+  <div id="app" style="display:none;">
+    <h2>Welcome to Music App 🎧</h2>
+    <input type="text" id="search" placeholder="Search songs..."><br>
+    <button onclick="searchSongs()">Search</button>
+    <h3>All Songs</h3>
+    <div id="songs"></div>
+
+    <h3>Your Favorites ❤️</h3>
+    <div id="favorites"></div>
+
+    <div id="player">
+      <p id="nowPlaying">Now Playing: -</p>
+      <button onclick="playPauseVideo()">Play/Pause</button>
+      <button onclick="nextSong()">Next</button>
+      <button onclick="previousSong()">Previous</button>
+      <button onclick="shufflePlaylist()">Shuffle</button>
+      <br>
+      Volume: <input type="range" id="volumeControl" min="0" max="100" value="50" onchange="adjustVolume(this.value)">
+    </div>
+
+    <div id="ytPlayer"></div>
+  </div>
+
+  <!-- YouTube IFrame API script -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    let player;
+    let currentVideoId = "";
+    let currentPlaylist = [];
+    let currentSongIndex = 0;
+    let isPlaying = false;
+
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('ytPlayer', {
+        height: '113',
+        width: '200',
+        videoId: '',
+        playerVars: {
+          'autoplay': 0,
+          'controls': 0
+        },
+        events: {
+          'onReady': onPlayerReady,
+          'onStateChange': onPlayerStateChange
+        }
+      });
+    }
+
+    function onPlayerReady(event) {
+      // Player is ready
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING) {
+        player.setPlaybackQuality('small'); // Force 144p
+      }
+    }
+
+    function playPauseVideo() {
+      if (isPlaying) {
+        player.pauseVideo();
+        isPlaying = false;
+      } else {
+        player.playVideo();
+        isPlaying = true;
+      }
+    }
+
+    function nextSong() {
+      if (currentPlaylist.length > 0) {
+        currentSongIndex = (currentSongIndex + 1) % currentPlaylist.length;
+        playAudioFromYouTube(currentPlaylist[currentSongIndex].videoId);
+      }
+    }
+
+    function previousSong() {
+      if (currentPlaylist.length > 0) {
+        currentSongIndex = (currentSongIndex - 1 + currentPlaylist.length) % currentPlaylist.length;
+        playAudioFromYouTube(currentPlaylist[currentSongIndex].videoId);
+      }
+    }
+
+    function shufflePlaylist() {
+      if (currentPlaylist.length > 0) {
+        currentSongIndex = Math.floor(Math.random() * currentPlaylist.length);
+        playAudioFromYouTube(currentPlaylist[currentSongIndex].videoId);
+      }
+    }
+
+    function playAudioFromYouTube(videoId) {
+      currentVideoId = videoId;
+      player.loadVideoById(videoId);
+      nowPlaying.textContent = `Now Playing: https://www.youtube.com/watch?v=${videoId}`;
+      updateTrackHistory(videoId);
+    }
+
+    function adjustVolume(value) {
+      if (player) player.setVolume(value);
+    }
+
+    // Function to handle displaying songs
+    function searchSongs() {
+      const query = document.getElementById('search').value;
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&videoCategoryId=10&key=AIzaSyAEXsXyZh10XdXa0nhuF9cAB0M6nudWvrQ`;
+
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          const songs = data.items.map(item => ({
+            title: item.snippet.title,
+            artist: item.snippet.channelTitle,
+            videoId: item.id.videoId
+          }));
+          showSongs(songs);
+        })
+        .catch(error => {
+          console.error("Error fetching data from YouTube API:", error);
+        });
+    }
+
+    function showSongs(songs) {
+      const songsDiv = document.getElementById('songs');
+      songsDiv.innerHTML = "";
+      songs.forEach(song => {
+        const div = document.createElement('div');
+        div.className = 'song';
+        div.innerHTML = `${song.title} - ${song.artist} <span class="like" onclick="toggleLike('${song.title}')">❤️</span>`;
+        div.onclick = () => {
+          currentPlaylist = songs;
+          currentSongIndex = songs.indexOf(song);
+          playAudioFromYouTube(song.videoId);
+        };
+        songsDiv.appendChild(div);
+      });
+    }
+
+    function toggleLike(title) {
+      event.stopPropagation();
+      const user = localStorage.getItem('loggedInUser');
+      let favs = JSON.parse(localStorage.getItem(`favs-${user}`) || "[]");
+      if (favs.includes(title)) {
+        favs = favs.filter(t => t !== title);
+      } else {
+        favs.push(title);
+      }
+      localStorage.setItem(`favs-${user}`, JSON.stringify(favs));
+      showFavorites();
+    }
+
+    // Function to handle displaying favorites
+    function showFavorites() {
+      const user = localStorage.getItem('loggedInUser');
+      const favs = JSON.parse(localStorage.getItem(`favs-${user}`) || "[]");
+      const favDiv = document.getElementById('favorites');
+      favDiv.innerHTML = "";
+      favs.forEach(title => {
+        const div = document.createElement("div");
+        div.className = "song";
+        div.textContent = title;
+        favDiv.appendChild(div);
+      });
+    }
+
+    // Function to handle track history
+    function updateTrackHistory(videoId) {
+      const user = localStorage.getItem('loggedInUser');
+      let history = JSON.parse(localStorage.getItem(`history-${user}`) || "[]");
+      history.push(videoId);
+      if (history.length > 10) history = history.slice(-10); // Limit history to last 10 tracks
+      localStorage.setItem(`history-${user}`, JSON.stringify(history));
+      showHistory();
+    }
+
+    // Function to display track history
+    function showHistory() {
+      const user = localStorage.getItem('loggedInUser');
+      const history = JSON.parse(localStorage.getItem(`history-${user}`) || "[]");
+      const historyDiv = document.getElementById('history');
+      historyDiv.innerHTML = "";
+      history.forEach(videoId => {
+        const div = document.createElement("div");
+        div.className = "song";
+        div.textContent = `https://www.youtube.com/watch?v=${videoId}`;
+        historyDiv.appendChild(div);
+      });
+    }
+
+    function signup() {
+      const email = document.getElementById('email').value;
+      const pass = document.getElementById('password').value;
+      if (!email || !pass) return document.getElementById('authMessage').textContent = "Enter all fields";
+      localStorage.setItem(`user-${email}`, pass);
+      document.getElementById('authMessage').textContent = "Signup successful!";
+    }
+
+    function login() {
+      const email = document.getElementById('email').value;
+      const pass = document.getElementById('password').value;
+      const saved = localStorage.getItem(`user-${email}`);
+      if (saved && saved === pass) {
+        localStorage.setItem("loggedInUser", email);
+        document.getElementById("auth").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        showFavorites();
+        showHistory();
+      } else {
+        document.getElementById('authMessage').textContent = saved ? "Incorrect password" : "User not found";
+      }
+    }
+  </script>
+</body>
+</html>
